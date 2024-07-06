@@ -1,0 +1,58 @@
+# General
+.DS_Store
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared libraries (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.bin
+*.srec
+*.list
+*.image
+*.map
+*.mdb
+*.ipk
+
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Editor directories and files
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+.*.swn
+.*~
+.vscode/
+.idea/
+*.sublime-workspace
