@@ -14,13 +14,13 @@ static const char *PORT = "8080";
 
 struct addrinfo *setup_address(const char *hostname, const char *port);
 int serve_client(int socket);
-int init_threadpool(struct tpool *tp, int nthreads);
-int free_threadpool(struct tpool *tp);
+int init_threadpool(tpool *tp, int nthreads);
+int free_threadpool(tpool *tp);
 
 int main()
 {
     // create tpool
-    struct tpool tp;
+    tpool tp;
     init_threadpool(&tp, 5);
 
     // get address
@@ -66,7 +66,7 @@ int main()
     {
         int conn_socket = accept(server_socket, NULL, NULL);
         printf("serving %d\n", conn_socket);
-        tpexecute(&tp, conn_socket, serve_client);
+        tp_execute(&tp, conn_socket, serve_client);
         printf("closing connection for %d\n", conn_socket);
     }
 
@@ -91,20 +91,20 @@ struct addrinfo *setup_address(const char *hostname, const char *port)
     return server;
 }
 
-int init_threadpool(struct tpool *tp, int nthreads)
+int init_threadpool(tpool *tp, int nthreads)
 {
-    struct tpconfig tpc;
+    tpconfig tpc;
     tpc.max_pool_size = nthreads;
 
     printf("init_threadpool, nthreads == %d\n", nthreads);
-    tpinit(tp, &tpc);
+    tp_init(tp, &tpc);
 
     return 0;
 }
 
-int free_threadpool(struct tpool *tp)
+int free_threadpool(tpool *tp)
 {
-    tpfree(tp);
+    tp_free(tp);
 
     return 0;
 }

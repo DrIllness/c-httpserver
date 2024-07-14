@@ -1,24 +1,24 @@
 #include <pthread.h>
 
-struct thread_data {
+typedef struct
+{
     int socket;
     int (*func)(int socket);
-};
+} thread_data;
 
-struct tpconfig
+typedef struct
 {
     int max_pool_size;
-};
+} tpconfig;
 
-struct tpool
+typedef struct
 {
-    int curr_size;
+    size_t curr_size;
     pthread_t *threads;
-    struct tpconfig *config;
-};
+    tpconfig *config;
+} tpool;
 
-int tpexecute(struct tpool *tp, int socket, int (*func) (int socket));
-void tpinit(struct tpool *tp, struct tpconfig *c);
-void tpfree(struct tpool *tp);
-
-void* run(void* thread_data);
+int tp_execute(tpool *tp, int socket, int (*func)(int socket));
+void tp_init(tpool *tp, tpconfig *c);
+void tp_free(tpool *tp);
+void *run(void *thread_id);
