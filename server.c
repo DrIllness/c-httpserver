@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include "threadpool.h"
+#include "request.h"
 
 #define MAX_QUEUE 100
 
@@ -111,11 +112,28 @@ int free_threadpool(tpool *tp)
 
 int serve_client(int socket)
 {
+    void* read_msg = malloc(4096); 
+    // read request
+    read(socket, read_msg, 4096);
+    printf("\n\nRaw request: %s\n\n", read_msg);    
+    
+    // check that it is enough space
+    
+    // parse into struct
+    request rqst;
+    parse(read_msg, &rqst);
+
+    // check if it is get request
+
+    // try to find resource
+
     char *message = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: 128\r\n\r\n<html>\n<body>\n<h1>Hello World</h1>\n<p>\nLet's see if this works\n</p>\n</body>\n</html>\n";
     write(socket, message, strlen(message) + 1);
     printf("served meesage to client %d:\n %s\n", socket, message);
     close(socket);
     printf("closing connection socket %d\n", socket);
+
+    free(read_msg);
 
     return 0;
 }
