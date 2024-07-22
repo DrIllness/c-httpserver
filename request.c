@@ -33,4 +33,6 @@ int parse(char *raw, request *request)
 
     // copy path
     strcpy(request->uri, loc_buf);
+
+    return 0;
 }

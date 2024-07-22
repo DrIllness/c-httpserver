@@ -5,12 +5,12 @@ Plan:
 [ ] PHASE 1
 - [X] Implemnet threadpool, to handle threads creation and serving client in using multiple threads
 - [X] Implement queue for threadpool
-- [ ] Make server handle GET requests to various resources in /web directory
-- [ ] Add support for POST requests
+- [X] Make server handle GET requests to various resources in /web directory
+- [ ] Split into handler, response and request .h files
 - [ ] Add logging tools to save logs
 - [ ] Add autocleanup of logs
 
 [ ] PHASE 2
-Authorisation, storing credentials, encryption, encrypting exchange
+POST/other types, authorisation, storing credentials, encryption, encrypting exchange
 
 

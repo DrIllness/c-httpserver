@@ -112,24 +112,47 @@ int free_threadpool(tpool *tp)
 
 int serve_client(int socket)
 {
-    void* read_msg = malloc(4096); 
+    void *read_msg = malloc(4096);
     // read request
     read(socket, read_msg, 4096);
-    printf("\n\nRaw request: %s\n\n", read_msg);    
-    
+    printf("\n\nRaw request: %s\n\n", read_msg);
+
     // check that it is enough space
-    
+
     // parse into struct
     request rqst;
     parse(read_msg, &rqst);
 
     // check if it is get request
+    if (rqst.type != GET)
+        return -1; // we don't handle anything except for get atm
 
     // try to find resource
+    // tmp solution
+    char *path = malloc(100);
+    strcpy(path, "/Users/eugendryl/Projects/c/cs162/hw2/web");
+    FILE *html = fopen(strcat(path, rqst.uri), "r");
 
-    char *message = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: 128\r\n\r\n<html>\n<body>\n<h1>Hello World</h1>\n<p>\nLet's see if this works\n</p>\n</body>\n</html>\n";
-    write(socket, message, strlen(message) + 1);
-    printf("served meesage to client %d:\n %s\n", socket, message);
+    char *response = malloc(4096); // tmp solution
+    if (html == NULL)
+    {
+        printf("Resource %s not found...\n", path);
+        strcpy(response, "HTTP/1.0 404 Not Fount\r\n");
+    }
+    else
+    {
+        char *htmlbuf = malloc(4096);
+        int cread = fread(htmlbuf, sizeof(char), 4096, html);
+        strcat(response, "HTTP/1.0 200 OK\r\n");
+        strcat(response, "Content-Type: text/html\r\nContent-Length:");
+        strcat(response, "128"); // fix content length
+        strcat(response, "\r\n\r\n");
+        strcat(response, htmlbuf);
+    }
+    fclose(html);
+
+    write(socket, response, strlen(response) + 1);
+    printf("served meesage to client %d:\n %s\n", socket, response);
     close(socket);
     printf("closing connection socket %d\n", socket);
 
