@@ -8,9 +8,9 @@
 
 #define NO_AVAILABLE_THREAD -1
 
-char *sem_common_lock_name = "sem_common_lock3";
-char *sem_queue_full_name = "sem_queue_full3";
-char *sem_queue_empty_name = "sem_queue_empty3";
+char *sem_common_lock_name = "sem_common_lock";
+char *sem_queue_full_name = "sem_queue_full";
+char *sem_queue_empty_name = "sem_queue_empty";
 
 sem_t *sem_common_lock;
 sem_t *sem_queue_full;
@@ -100,15 +100,12 @@ int tp_execute(tpool *tp, int socket, int (*func)(int))
     printf("sem_queue_empty in tp_execute: acquiring...\n");
     sem_wait(sem_queue_empty); // decrease available slots
     printf("sem_queue_empty in tp_execute: acquired\n");
-    printf("sem_common_lock in tp_execute: acquiring...\n");
     sem_wait(sem_common_lock); // acquire mutex
     printf("sem_common_lock in tp_execute: acquired\n");
 
     queue_add(&work_q, data);
-    printf("sem_common_lock in tp_execute: releasing...\n");
     sem_post(sem_common_lock); // release mutex
     printf("sem_common_lock in tp_execute: released\n");
-    printf("sem_queue_full in tp_execute: releasing...\n");
     sem_post(sem_queue_full); // notify consumers, that its not full
     printf("sem_queue_full in tp_execute: released\n");
 
@@ -124,19 +121,15 @@ void *run(void *thread_id)
     // infinite polling
     while (1)
     {
-        printf("sem_queue_full in run: acquiring...\n");
         sem_wait(sem_queue_full);
         printf("sem_queue_full in run: acquired\n");
-        printf("sem_common_lock in run: acquiring...\n");
         sem_wait(sem_common_lock); // acquire
         printf("sem_common_lock in run: acquired\n");
 
         poll = queue_poll(&work_q, data);
 
-        printf("sem_common_lock in run: releasing...\n");
         sem_post(sem_common_lock); // releaase
         printf("sem_common_lock in run: released\n");
-        printf("sem_queue_empty in run: releasing...\n");
         sem_post(sem_queue_empty);
         printf("sem_queue_empty in run: released\n");
 
