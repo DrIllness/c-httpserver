@@ -1,0 +1,32 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"stdio.h": "c",
+			"types.h": "c",
+			"_o_sync.h": "c",
+			"_null.h": "c",
+			"ostream": "c",
+			"ios": "c",
+			"pthread.h": "c",
+			"__threading_support": "c",
+			"thread": "c",
+			"__verbose_abort": "c",
+			"cstdio": "c",
+			"queue": "c",
+			"__locale": "c",
+			"atomic": "c",
+			"cstdlib": "c",
+			"locale": "c",
+			"new": "c",
+			"typeinfo": "c",
+			"algorithm": "c",
+			"cmath": "c",
+			"complex": "c"
+		}
+	}
+}

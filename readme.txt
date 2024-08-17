@@ -9,9 +9,11 @@ Plan:
 - [X] Split into response and request .h files
 
 [ ] PHASE 2
+- [X] Add args ip, port, pool size
+- [ ] Add proxy mode
 - [ ] Add logging tool to save logs
 - [ ] Add autocleanup for logs
-- [ ] Add arg to pass for logs
+- [X] Add arg to pass for logs
 - [ ] POST/other types 
 - [ ] Authorisation, storing credentials, encryption, encrypting exchange
 

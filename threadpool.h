@@ -8,7 +8,7 @@ typedef struct
 
 typedef struct
 {
-    int max_pool_size;
+    size_t max_pool_size;
 } tpconfig;
 
 typedef struct
