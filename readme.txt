@@ -1,4 +1,4 @@
-Web server project
+[WIP] Web server project
 Implementing web server in C for better understanding of Rest API, POSIX threads, sockets etc, and to get practice in C lang.
 Plan:
 
