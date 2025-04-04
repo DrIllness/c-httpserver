@@ -38,6 +38,8 @@
 *.mdb
 *.ipk
 
+# Logs
+logs/
 
 # Debug files
 *.dSYM/

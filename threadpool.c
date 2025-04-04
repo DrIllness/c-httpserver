@@ -79,7 +79,7 @@ void tp_init(tpool *tp, tpconfig *c)
         test_pthread_spread();
 }
 
-int tp_execute(tpool *tp, int socket, int (*func)(int))
+int tp_execute(int socket, int (*func)(int))
 {
     printf("create thread data\n");
 

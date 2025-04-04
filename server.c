@@ -135,8 +135,6 @@ int main(int argc, char **argv)
 	{
 		printf("  Logging: DISABLED\n");
 	}
-	free(ip_address);
-	free(port);
 
 	if (logs_enabled)
 	{
@@ -152,11 +150,11 @@ int main(int argc, char **argv)
 
 	// create tpool
 	tpool tp;
+
 	init_threadpool(&tp, threadpool_size);
 
 	// get address
-	// struct addrinfo *server = setup_address(ip_address, port);
-	struct addrinfo *server = setup_address(DEFAULT_HOST_NAME, DEFAULT_PORT);
+	struct addrinfo *server = setup_address(ip_address, port);
 
 	// create socket
 	int server_socket = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
@@ -186,7 +184,6 @@ int main(int argc, char **argv)
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
 	}
-
 	// start listening
 	if (listen(server_socket, MAX_QUEUE) < 0)
 	{
@@ -195,14 +192,12 @@ int main(int argc, char **argv)
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
 	}
-
+	
 	// main loop
 	while (1)
 	{
 		int conn_socket = accept(server_socket, NULL, NULL);
-		printf("serving %d\n", conn_socket);
-		tp_execute(&tp, conn_socket, serve_client);
-		printf("closing connection for %d\n", conn_socket);
+		tp_execute(conn_socket, serve_client);
 	}
 
 	// close listening socket and free pool
@@ -231,6 +226,7 @@ int init_threadpool(tpool *tp, int nthreads)
 {
 	tpconfig tpc;
 	tp->config = &tpc;
+	tp->curr_size = 0;
 	tpc.max_pool_size = nthreads;
 
 	tp_init(tp, &tpc);
@@ -270,29 +266,40 @@ int serve_client(int socket)
 
 	// try to find resource
 	char *path = malloc(100);
-	strcpy(path, "/Users/eugendryl/Projects/c/cs162/hw2/web");
-	FILE *html = fopen(strcat(path, rqst.uri), "r");
+	strcpy(path, "/Users/eugendryl/Projects/c-learning/cs162/c-server/web"); // fix const path
+	
+	FILE *html = fopen(strcat(path, "/index.html"), "r");
 
 	char *response = malloc(4096);
 	if (html == NULL)
 	{
 		//snprintf(log_message, sizeof(log_message), "Resource %s not found...\n", path);
 		//try_to_log(log_message);
-		strcpy(response, "HTTP/1.0 404 Not Found\r\n");
+		strcpy(response, "HTTP/1.0 404 Not Found\r\n"); // ... and this also
 	}
 	else
 	{
+		printf("inside html != NULL\n");
+
 		char *htmlbuf = malloc(4096);
-		/*int cread = */ fread(htmlbuf, sizeof(char), 4096, html);
+		int cread =  fread(htmlbuf, sizeof(char), 4096, html);
+		printf("cread == %d\n", cread);
 		strcat(response, "HTTP/1.0 200 OK\r\n");
 		strcat(response, "Content-Type: text/html\r\nContent-Length:");
-		strcat(response, "128"); // fix content length
+		
+		char *buffer = malloc(8);
+		snprintf(buffer, sizeof(buffer), "%d", cread);
+		
+		strcat(response, buffer); 
 		strcat(response, "\r\n\r\n");
 		strcat(response, htmlbuf);
 	}
 	fclose(html);
 
-	write(socket, response, strlen(response) + 1);
+	printf("message sent == %s\n", response);
+
+	ssize_t swrite = write(socket, response, strlen(response) + 1);
+	printf("ssize_t swrite == %d\n", swrite);
 
 	//snprintf(log_message, sizeof(log_message), "served meesage to client %d:\n %s\n", socket, response);
 	//try_to_log(log_message);
