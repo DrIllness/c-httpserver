@@ -39,7 +39,7 @@
 *.ipk
 
 # Logs
-logs/
+logs/*.txt
 
 # Debug files
 *.dSYM/
