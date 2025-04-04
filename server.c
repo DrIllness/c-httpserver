@@ -279,11 +279,8 @@ int serve_client(int socket)
 	}
 	else
 	{
-		printf("inside html != NULL\n");
-
 		char *htmlbuf = malloc(4096);
 		int cread =  fread(htmlbuf, sizeof(char), 4096, html);
-		printf("cread == %d\n", cread);
 		strcat(response, "HTTP/1.0 200 OK\r\n");
 		strcat(response, "Content-Type: text/html\r\nContent-Length:");
 		
@@ -296,11 +293,7 @@ int serve_client(int socket)
 	}
 	fclose(html);
 
-	printf("message sent == %s\n", response);
-
 	ssize_t swrite = write(socket, response, strlen(response) + 1);
-	printf("ssize_t swrite == %d\n", swrite);
-
 	//snprintf(log_message, sizeof(log_message), "served meesage to client %d:\n %s\n", socket, response);
 	//try_to_log(log_message);
 	close(socket);
