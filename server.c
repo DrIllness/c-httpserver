@@ -1,4 +1,7 @@
 #include <sys/socket.h>
+#include <signal.h>
+#include <sys/select.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,8 +21,13 @@ static const char *DEFAULT_PORT = "8080";
 static const int DEFAULT_THREAD_POOL_SIZE = 5;
 static const int MAX_EXPIRATION_DATE = 259200;
 
-static int logs_expiration_date = 0; // default behaviour, no loggin
+static int logs_expiration_date = 0; // default behaviour, no logging
 static int logs_enabled = 0;
+
+static int pipe_fds[2];
+static int server_socket = -1;
+static tpool tp;
+volatile sig_atomic_t stop_requested = 0; // global flag set on shutdown
 
 struct addrinfo *setup_address(const char *hostname, const char *port);
 int serve_client(int socket);
@@ -27,7 +35,6 @@ int init_threadpool(tpool *tp, int nthreads);
 int free_threadpool(tpool *tp);
 void try_to_log(char *msg);
 
-// function to display the help menu
 void show_help(const char *prog_name)
 {
 	printf("Usage: %s -t threadpool_size -i ip_address -p port\n", prog_name);
@@ -40,16 +47,11 @@ void show_help(const char *prog_name)
 }
 
 int is_ip_valid(char *ip) { return ip != NULL; }
-
 int is_thread_pool_size_valid(int s) { return s > 0 && s < 10; }
-
 int is_logs_expiration_valid(int s) { return s <= MAX_EXPIRATION_DATE; }
-
 int is_logging_enabled(int s) { return s > 0; }
-
 int is_port_valid(char *p) { return p != NULL; }
 
-// function to parse command-line arguments
 void parse_arguments(int argc, char *argv[], int *threadpool_size, char **ip_address, char **port, int *le)
 {
 	int opt;
@@ -79,6 +81,23 @@ void parse_arguments(int argc, char *argv[], int *threadpool_size, char **ip_add
 	}
 }
 
+void signal_handler(int signo)
+{
+	printf("Caught signal %d\n", signo);
+	stop_requested = 1;
+	write(pipe_fds[1], "x", 1);
+}
+
+void setup_signal_handler()
+{
+	struct sigaction sa;
+	sa.sa_handler = signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+}
+
 int main(int argc, char **argv)
 {
 	int threadpool_size = 0;
@@ -86,10 +105,7 @@ int main(int argc, char **argv)
 	char *ip_address = NULL;
 	char *port = NULL;
 
-	// parse command-line arguments
 	parse_arguments(argc, argv, &threadpool_size, &ip_address, &port, &logs_expiration);
-
-	// print parsed arguments for verification
 
 	if (!is_ip_valid(ip_address))
 	{
@@ -122,6 +138,7 @@ int main(int argc, char **argv)
 		port = strdup(DEFAULT_PORT);
 		printf("Missing valid port, defaulting to %s\n", DEFAULT_PORT);
 	}
+
 	printf("======================================\n");
 	printf("Starting server with following config:\n");
 	printf("  Threadpool Size: %d\n", threadpool_size);
@@ -148,35 +165,38 @@ int main(int argc, char **argv)
 		}
 	}
 
-	// create tpool
-	tpool tp;
+	// create the pipe used to signal shutdown
+	if (pipe(pipe_fds) < 0)
+	{
+		perror("pipe");
+		exit(EXIT_FAILURE);
+	}
+	// make the write end non-blocking
+	fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK); 
+	setup_signal_handler();
 
 	init_threadpool(&tp, threadpool_size);
 
-	// get address
+	// get the server address and create the socket
 	struct addrinfo *server = setup_address(ip_address, port);
-
-	// create socket
-	int server_socket = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
+	server_socket = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
 	if (server_socket < 0)
 	{
-		perror("Failed to creat socket, exiting...\n");
+		perror("Failed to create socket, exiting...\n");
 		exit(EXIT_FAILURE);
 	}
 
-	// enable reuse
-	int opt = 1;
-	if (setsockopt(server_socket, SOL_SOCKET,
-				   SO_REUSEADDR, &opt,
-				   sizeof(opt)))
+	// enable socket reuse
+	int optval = 1;
+	if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
-		perror("Failed to set option, exiting...\n");
+		perror("Failed to set socket option, exiting...\n");
 		close_log_file();
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
 	}
 
-	// bind
+	// bind the socket
 	if (bind(server_socket, server->ai_addr, server->ai_addrlen) < 0)
 	{
 		perror("Failed to bind, exiting...\n");
@@ -184,6 +204,8 @@ int main(int argc, char **argv)
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
 	}
+	freeaddrinfo(server); // no longer needed
+
 	// start listening
 	if (listen(server_socket, MAX_QUEUE) < 0)
 	{
@@ -192,24 +214,54 @@ int main(int argc, char **argv)
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
 	}
-	
-	// main loop
+
+	fd_set readfds;
+	int maxfd = (pipe_fds[0] > server_socket ? pipe_fds[0] : server_socket);
+
 	while (1)
 	{
-		int conn_socket = accept(server_socket, NULL, NULL);
-		tp_execute(conn_socket, serve_client);
+		FD_ZERO(&readfds);
+		FD_SET(pipe_fds[0], &readfds);
+		FD_SET(server_socket, &readfds);
+
+		int ready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+		if (ready < 0)
+		{
+			perror("select error");
+			break;
+		}
+
+		// if a shutdown signal has been received, break out of the loop
+		if (FD_ISSET(pipe_fds[0], &readfds))
+		{
+			char buf;
+			read(pipe_fds[0], &buf, 1); // consume the signal byte
+			printf("\nReceived shutdown signal. Closing...\n");
+			break;
+		}
+
+		// if there is a new connection, accept it and hand it off to the thread pool
+		if (FD_ISSET(server_socket, &readfds))
+		{
+			int conn_socket = accept(server_socket, NULL, NULL);
+			if (conn_socket >= 0)
+				tp_execute(conn_socket, serve_client);
+		}
 	}
 
-	// close listening socket and free pool
+	// cleanup
 	close(server_socket);
-	close_log_file();
+	close(pipe_fds[0]);
+	close(pipe_fds[1]);
 	free_threadpool(&tp);
+	close_log_file();
+
+	return 0;
 }
 
 struct addrinfo *setup_address(const char *hostname, const char *port)
 {
 	struct addrinfo *server;
-
 	struct addrinfo hints;
 	memset(&hints, 0, sizeof(hints));
 
@@ -218,7 +270,6 @@ struct addrinfo *setup_address(const char *hostname, const char *port)
 	hints.ai_flags = AI_PASSIVE;
 
 	getaddrinfo(hostname, port, &hints, &server);
-
 	return server;
 }
 
@@ -228,79 +279,60 @@ int init_threadpool(tpool *tp, int nthreads)
 	tp->config = &tpc;
 	tp->curr_size = 0;
 	tpc.max_pool_size = nthreads;
-
 	tp_init(tp, &tpc);
-
 	return 0;
 }
 
 int free_threadpool(tpool *tp)
 {
 	tp_free(tp);
-
 	return 0;
 }
 
 int serve_client(int socket)
 {
-	//char log_message[256];
-	//snprintf(log_message, sizeof(log_message), "Serving client %d", socket);
-	//try_to_log(log_message);
-
 	void *read_msg = malloc(4096);
-	// read request
+	if (!read_msg)
+		return -1;
 	read(socket, read_msg, 4096);
 
-	//snprintf(log_message, sizeof(log_message), "\n\nRaw request: %s\n\n", (char *)read_msg);
-	//try_to_log(log_message);
-
-	// check that it is enough space
-
-	// parse into struct
 	request rqst;
 	parse(read_msg, &rqst);
 
-	// check if it is get request
 	if (rqst.type != GET)
-		return -1; // we don't handle anything except for get atm
+		return -1; // we only handle GET requests for now
 
-	// try to find resource
 	char *path = malloc(100);
-	strcpy(path, "/Users/eugendryl/Projects/c-learning/cs162/c-server/web"); // fix const path
-	
+	strcpy(path, "/Users/eugendryl/Projects/c-learning/cs162/c-server/web");
 	FILE *html = fopen(strcat(path, "/index.html"), "r");
 
 	char *response = malloc(4096);
 	if (html == NULL)
 	{
-		//snprintf(log_message, sizeof(log_message), "Resource %s not found...\n", path);
-		//try_to_log(log_message);
-		strcpy(response, "HTTP/1.0 404 Not Found\r\n"); // ... and this also
+		strcpy(response, "HTTP/1.0 404 Not Found\r\n");
 	}
 	else
 	{
 		char *htmlbuf = malloc(4096);
-		int cread =  fread(htmlbuf, sizeof(char), 4096, html);
+		int cread = fread(htmlbuf, sizeof(char), 4096, html);
 		strcat(response, "HTTP/1.0 200 OK\r\n");
 		strcat(response, "Content-Type: text/html\r\nContent-Length:");
-		
 		char *buffer = malloc(8);
-		snprintf(buffer, sizeof(buffer), "%d", cread);
-		
-		strcat(response, buffer); 
+		snprintf(buffer, 8, "%d", cread);
+		strcat(response, buffer);
 		strcat(response, "\r\n\r\n");
 		strcat(response, htmlbuf);
+		free(htmlbuf);
+		free(buffer);
 	}
-	fclose(html);
+	if (html)
+		fclose(html);
 
-	ssize_t swrite = write(socket, response, strlen(response) + 1);
-	//snprintf(log_message, sizeof(log_message), "served meesage to client %d:\n %s\n", socket, response);
-	//try_to_log(log_message);
+	write(socket, response, strlen(response) + 1);
 	close(socket);
-	//snprintf(log_message, sizeof(log_message), "closing connection socket %d\n", socket);
-	//try_to_log(log_message);
-
 	free(read_msg);
+	free(path);
+	free(response);
 
 	return 0;
 }

@@ -33,7 +33,7 @@ void tp_init(tpool *tp, tpconfig *c)
 	*(tp->config) = *c;
 	tp->curr_size = 0;
 
-	// init thread pool
+	// allocate threads array
 	pthread_t *t = malloc(sizeof(pthread_t) * c->max_pool_size);
 	if (t == NULL)
 	{
@@ -41,7 +41,7 @@ void tp_init(tpool *tp, tpconfig *c)
 	}
 	tp->threads = t;
 
-	unlink_semaphores(); // in case unexpected shutdown occured before
+	unlink_semaphores(); // in case an unexpected shutdown occurred before
 
 	sem_queue_empty = sem_open(sem_queue_empty_name, O_CREAT, 0777, tp->config->max_pool_size); // full pool size available
 	if (sem_queue_empty == SEM_FAILED)
@@ -50,20 +50,21 @@ void tp_init(tpool *tp, tpconfig *c)
 		exit(EXIT_FAILURE);
 	}
 
-	sem_queue_full = sem_open(sem_queue_full_name, O_CREAT, 0777, 0); // queue is not full on init
+	sem_queue_full = sem_open(sem_queue_full_name, O_CREAT, 0777, 0); // queue initially empty
 	if (sem_queue_full == SEM_FAILED)
 	{
 		fprintf(stderr, "%s\n", "ERROR creating semaphore sem_queue_full");
 		exit(EXIT_FAILURE);
 	}
-	sem_common_lock = sem_open(sem_common_lock_name, O_CREAT, 0777, 1); // free lock, so that we can proberen successfully
+	sem_common_lock = sem_open(sem_common_lock_name, O_CREAT, 0777, 1); // free lock
 	if (sem_common_lock == SEM_FAILED)
 	{
 		fprintf(stderr, "%s\n", "ERROR creating semaphore common_lock");
 		exit(EXIT_FAILURE);
 	}
 
-	sem_wait(sem_common_lock); // block so inited threads are not run
+	// block inited threads until we release them
+	sem_wait(sem_common_lock);
 
 	while (tp->curr_size < c->max_pool_size)
 	{
@@ -93,38 +94,76 @@ int tp_execute(int socket, int (*func)(int))
 	queue_add(&work_q, data);
 
 	sem_post(sem_common_lock); // release mutex
-	sem_post(sem_queue_full);  // notify consumers, that its not full
+	sem_post(sem_queue_full);  // notify consumers that the queue is not empty
 
 	free(data);
 
 	return 0;
 }
 
+// the worker thread function now checks for a shutdown signal (poison pill)
 void *run(void *thread_id)
 {
 	thread_data *data = malloc(sizeof(thread_data));
 	int poll = 0;
 	while (1)
 	{
-		sem_wait(sem_queue_full);  // wait till something in queue
+		sem_wait(sem_queue_full);  // wait until something is in the queue
 		sem_wait(sem_common_lock); // acquire mutex
 
 		poll = queue_poll(&work_q, data);
 
-		sem_post(sem_common_lock); // releaase mutex
-		sem_post(sem_queue_empty); // notify consumers, that its not empty
+		sem_post(sem_common_lock); // release mutex
+		sem_post(sem_queue_empty); // notify producers that a slot is free
 
 		if (!poll)
 		{
+			// check for poison pill: a NULL function pointer signals shutdown
+			if (data->func == NULL)
+			{
+				break;
+			}
 			data->func(data->socket);
 		}
 	}
 
 	free(data);
+	return NULL;
 }
 
+// new function to gracefully shut down the thread pool.
+void tp_shutdown(tpool *tp)
+{
+	int i;
+	// enqueue a poison pill for each worker thread
+	for (i = 0; i < tp->curr_size; i++)
+	{
+		thread_data *data = malloc(sizeof(thread_data));
+		data->socket = 0;  // not used
+		data->func = NULL; // poison pill signal
+
+		sem_wait(sem_queue_empty);
+		sem_wait(sem_common_lock);
+
+		queue_add(&work_q, data);
+
+		sem_post(sem_common_lock);
+		sem_post(sem_queue_full);
+
+		free(data);
+	}
+	// join all worker threads
+	for (i = 0; i < tp->curr_size; i++)
+	{
+		pthread_join(tp->threads[i], NULL);
+	}
+}
+
+// tp_free now calls tp_shutdown before cleaning up
 void tp_free(tpool *tp)
 {
+	tp_shutdown(tp);
+
 	sem_close(sem_common_lock);
 	sem_unlink(sem_common_lock_name);
 
@@ -136,5 +175,4 @@ void tp_free(tpool *tp)
 
 	queue_dispose(&work_q);
 	free(tp->threads);
-	free(tp->config);
 }
