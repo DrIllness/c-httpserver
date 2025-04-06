@@ -195,6 +195,8 @@ int main(int argc, char **argv)
 	if (server_socket < 0)
 	{
 		perror("Failed to create socket, exiting...\n");
+		try_to_log("Failed to create socket, exiting...\n");
+		close_log_file();
 		exit(EXIT_FAILURE);
 	}
 
@@ -203,6 +205,7 @@ int main(int argc, char **argv)
 	if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		perror("Failed to set socket option, exiting...\n");
+		try_to_log("Failed to set socket option, exiting...\n");
 		close_log_file();
 		free_threadpool(&tp);
 		exit(EXIT_FAILURE);
@@ -239,7 +242,8 @@ int main(int argc, char **argv)
 		int ready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
 		if (ready < 0)
 		{
-			perror("select error");
+			perror("Select error\n");
+			try_to_log("Select error\n");
 			break;
 		}
 
@@ -249,6 +253,7 @@ int main(int argc, char **argv)
 			char buf;
 			read(pipe_fds[0], &buf, 1); // consume the signal byte
 			printf("\nReceived shutdown signal. Closing...\n");
+			try_to_log("Received shutdown signal. Closing...");
 			break;
 		}
 
@@ -304,10 +309,10 @@ int free_threadpool(tpool *tp)
 
 int serve_client(int socket)
 {
-	printf("serving client %d...\n", socket);
 	void *read_msg = malloc(4096);
 	if (!read_msg)
 		return -1;
+
 	read(socket, read_msg, 4096);
 
 	request rqst;
@@ -326,6 +331,7 @@ int serve_client(int socket)
 	if (html == NULL)
 	{
 		strcpy(response, "HTTP/1.0 404 Not Found\r\n");
+		try_to_log("Requested resources is not found");
 	}
 	else
 	{
@@ -345,6 +351,7 @@ int serve_client(int socket)
 		fclose(html);
 
 	write(socket, response, strlen(response) + 1);
+	try_to_log("Writing to socket");
 	close(socket);
 	free(read_msg);
 	free(response);
