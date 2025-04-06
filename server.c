@@ -20,9 +20,11 @@ static const char *DEFAULT_HOST_NAME = "127.0.0.1";
 static const char *DEFAULT_PORT = "8080";
 static const int DEFAULT_THREAD_POOL_SIZE = 5;
 static const int MAX_EXPIRATION_DATE = 259200;
+static const char* DEFAULT_WEBSITE_DIR_NAME = "web";
 
 static int logs_expiration_date = 0; // default behaviour, no logging
 static int logs_enabled = 0;
+static char* web_dir_name = NULL;
 
 static int pipe_fds[2];
 static int server_socket = -1;
@@ -39,11 +41,12 @@ void show_help(const char *prog_name)
 {
 	printf("Usage: %s -t threadpool_size -i ip_address -p port\n", prog_name);
 	printf("Options:\n");
-	printf("  -t    Size of the threadpool (integer)\n");
-	printf("  -i    IP address (string)\n");
-	printf("  -p    Port (string)\n");
-	printf("  -h    Show this help message\n");
+	printf("  -t    Size of the threadpool (integer).\n");
+	printf("  -i    IP address (string).\n");
+	printf("  -p    Port (string).\n");
+	printf("  -h    Show this help message.\n");
 	printf("  -l    Set expiration date for logs in seconds. Max value 259200s (3 days). By default is set to 0, which disables logging.\n");
+	printf("  -w    Sets name for the web directory to look up in root dir.\n");
 }
 
 int is_ip_valid(char *ip) { return ip != NULL; }
@@ -55,7 +58,7 @@ int is_port_valid(char *p) { return p != NULL; }
 void parse_arguments(int argc, char *argv[], int *threadpool_size, char **ip_address, char **port, int *le)
 {
 	int opt;
-	while ((opt = getopt(argc, argv, "t:i:p:h:l:")) != -1)
+	while ((opt = getopt(argc, argv, "t:i:p:hl:w:")) != -1)
 	{
 		switch (opt)
 		{
@@ -74,6 +77,10 @@ void parse_arguments(int argc, char *argv[], int *threadpool_size, char **ip_add
 		case 'h':
 			show_help(argv[0]);
 			exit(EXIT_SUCCESS);
+			break;
+		case 'w':
+			web_dir_name = strdup(optarg);		
+			break;
 		default:
 			fprintf(stderr, "Usage: %s -t threadpool_size -i ip_address -p port\n", argv[0]);
 			exit(EXIT_FAILURE);
@@ -138,12 +145,17 @@ int main(int argc, char **argv)
 		port = strdup(DEFAULT_PORT);
 		printf("Missing valid port, defaulting to %s\n", DEFAULT_PORT);
 	}
+	if (web_dir_name == NULL)
+	{
+		web_dir_name = strdup(DEFAULT_WEBSITE_DIR_NAME);
+	}
 
 	printf("======================================\n");
 	printf("Starting server with following config:\n");
 	printf("  Threadpool Size: %d\n", threadpool_size);
 	printf("  IP Address: %s\n", ip_address);
 	printf("  Port: %s\n", port);
+	printf("  Web site dir: %s\n", web_dir_name);
 	if (logs_enabled)
 	{
 		printf("  Logging: ENABLED\n  Logs expiration date: %d(s)\n", logs_expiration_date);
@@ -255,6 +267,7 @@ int main(int argc, char **argv)
 	close(pipe_fds[1]);
 	free_threadpool(&tp);
 	close_log_file();
+	free(web_dir_name);
 
 	return 0;
 }
@@ -302,9 +315,7 @@ int serve_client(int socket)
 	if (rqst.type != GET)
 		return -1; // we only handle GET requests for now
 
-	char *path = malloc(100);
-	strcpy(path, "/Users/eugendryl/Projects/c-learning/cs162/c-server/web");
-	FILE *html = fopen(strcat(path, "/index.html"), "r");
+	FILE *html = fopen(strcat(web_dir_name, "/index.html"), "r");
 
 	char *response = malloc(4096);
 	if (html == NULL)
@@ -331,7 +342,6 @@ int serve_client(int socket)
 	write(socket, response, strlen(response) + 1);
 	close(socket);
 	free(read_msg);
-	free(path);
 	free(response);
 
 	return 0;

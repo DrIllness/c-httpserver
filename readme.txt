@@ -9,11 +9,13 @@ Plan:
 - [X] Split into response and request .h files
 
 [ ] PHASE 2
+- [X] Add dynamic name for web folder
 - [X] Add args ip, port, pool size
-- [ ] Add proxy mode
 - [ ] Add logging tool to save logs
 - [ ] Add autocleanup for logs
 - [X] Add arg to pass for logs
+
+[ ] PHASE 3
 - [ ] POST/other types 
 - [ ] Authorisation, storing credentials, encryption, encrypting exchange
 
