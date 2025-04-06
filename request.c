@@ -18,6 +18,8 @@ int parse(char *raw, request *request)
 
     *--tmp_loc_buf = '\0'; // returning after 1 extra inc
 
+	// default value
+	request->uri = NULL;
     // set type
     if (strcmp(loc_buf, "GET") == 0)
         request->type = GET;
@@ -32,7 +34,7 @@ int parse(char *raw, request *request)
     *--tmp_loc_buf = '\0'; // returning after 1 extra inc
 
     // copy path
-    strcpy(request->uri, loc_buf);
+    request->uri = strdup(loc_buf);
 
-    return 0;
+	return 0;
 }

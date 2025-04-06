@@ -304,6 +304,7 @@ int free_threadpool(tpool *tp)
 
 int serve_client(int socket)
 {
+	printf("serving client %d...\n", socket);
 	void *read_msg = malloc(4096);
 	if (!read_msg)
 		return -1;
@@ -315,7 +316,11 @@ int serve_client(int socket)
 	if (rqst.type != GET)
 		return -1; // we only handle GET requests for now
 
-	FILE *html = fopen(strcat(web_dir_name, "/index.html"), "r");
+	char *file_to_open = malloc(64);
+	if (rqst.uri == NULL || !strcmp(rqst.uri, "/")) rqst.uri = strdup("/index.html"); // fallback
+	strcat(file_to_open, web_dir_name);
+	strcat(file_to_open, rqst.uri);
+	FILE *html = fopen(file_to_open, "r");
 
 	char *response = malloc(4096);
 	if (html == NULL)
@@ -343,6 +348,7 @@ int serve_client(int socket)
 	close(socket);
 	free(read_msg);
 	free(response);
+	free(rqst.uri);
 
 	return 0;
 }
